@@ -3,6 +3,8 @@
 #include <string.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <dbus/dbus.h>
 
 
 #define BACKLIGHT "/sys/class/backlight"
@@ -57,6 +59,44 @@ int write_value(char* path, int value) {
     return 1;
 }
 
+int dbus_set_brightness(char* subsystem, char* device, uint32_t value) {
+    /* Sets the brightness by calling the dbus API-method
+     * SetBrightness with the correct arguments
+     * */    
+
+    DBusConnection* connection = NULL;
+    DBusError dbus_error; 
+    DBusMessage *msg = NULL;
+    DBusMessage *reply = NULL;
+
+    dbus_error_init(&dbus_error);
+    connection = dbus_bus_get(DBUS_BUS_SYSTEM, &dbus_error);
+
+    if (dbus_error_is_set(&dbus_error)) {return -1;}
+    
+    msg = dbus_message_new_method_call(
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1/session/auto",
+        "org.freedesktop.login1.Session",
+        "SetBrightness"        
+    );
+
+
+    printf("%s, %s, %d\n", subsystem, device, value);
+
+    if (!dbus_message_append_args(
+        msg,
+        DBUS_TYPE_STRING, &subsystem,
+        DBUS_TYPE_STRING, &device,
+        DBUS_TYPE_UINT32, &value,
+        DBUS_TYPE_INVALID
+    )) {return -1;}
+    
+    reply = dbus_connection_send_with_reply_and_block(connection, msg, -1, &dbus_error);
+
+    return 1;
+}
+
 int read_device_values(char* directory, char* device, int* result) {
    /* Reads the values for brightness and maximum-brightness 
     * given the specifed device name.
@@ -108,7 +148,7 @@ void change_device_brightness(char* directory, char* device, int delta) {
         new_brightness = max_brightness;
     }
     else if (new_brightness <= 0) {
-        new_brightness = 0;
+        new_brightness = 100;
     }
 
     // TODO: This is a duplicate from read_device_values()
@@ -117,9 +157,20 @@ void change_device_brightness(char* directory, char* device, int delta) {
     char path[path_size];
     snprintf(path, path_size, "%s/%s/%s", directory, device, B_CUR);
 
-    if (write_value(path, new_brightness) == -1) {
-        printf("Could not change brightness at %s, check permissions\n", path); 
+    //if (write_value(path, new_brightness) == -1) {
+    //    printf("Could not change brightness at %s, check permissions\n", path); 
+    //}
+    
+    char* subsystem;
+    if (strcmp(directory, BACKLIGHT) == 0) {
+        subsystem = "backlight";
     }
+    else if(strcmp(directory, LEDS) == 0) {
+        subsystem = "leds";    
+    }
+
+    if  (dbus_set_brightness(subsystem, device, new_brightness) == -1) {return;}
+    
     return;
 }
 
