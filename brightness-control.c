@@ -148,7 +148,7 @@ void change_device_brightness(char* directory, char* device, int delta) {
         new_brightness = max_brightness;
     }
     else if (new_brightness <= 0) {
-        new_brightness = 100;
+        new_brightness = 0;
     }
 
     // TODO: This is a duplicate from read_device_values()
